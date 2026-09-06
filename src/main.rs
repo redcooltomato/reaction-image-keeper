@@ -1,12 +1,13 @@
 /* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release */
 /* #![expect(rustdoc::missing_crate_level_docs)] // it's an example */
 
-use std::{println, eprintln, fs};
+use std::{println, eprintln, fs, cmp::max};
 use anyhow::Result;
 use egui::Sense;
 use eframe::egui;
 
 const APP_NAME: &'static str = "reaction image keeper";
+const MAGIC_FRACTION: f32 = 0.15;
 
 // boilerplate
 fn main() -> eframe::Result {
@@ -18,6 +19,13 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
+
+            /* let screen_size = cc.egui_ctx.input(|i| i.viewport().monitor_size)
+                .unwrap();
+
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(
+                screen_size * MAGIC_FRACTION
+            )); */
 
             Ok(Box::<MyApp>::default())
         }),
@@ -67,7 +75,7 @@ impl EntryStorage {
         selected_entries.clear();
 
         for entry in &self.entries {
-            if search_rq == "" || entry.name.contains(search_rq) /* && !selected_entries.contains(entry) */ {
+            if search_rq.trim() == "" || entry.name.contains(search_rq) /* && !selected_entries.contains(entry) */ {
                 selected_entries.push(entry.clone());
             }
         }
@@ -117,6 +125,19 @@ impl eframe::App for MyApp {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                    let theme_change = ui.button(
+                        if ui.ctx().theme() == egui::Theme::Light { "☼" }
+                        else { "☾" }
+                    );
+
+                    if theme_change.clicked() {
+                        if ui.ctx().theme() == egui::Theme::Light {
+                            ui.ctx().set_theme(egui::Theme::Dark);
+                        } else {
+                            ui.ctx().set_theme(egui::Theme::Light);
+                        }
+                    }
+
                     let reload_list_button = ui.button("  ⟳  ");
 
                     if reload_list_button.clicked() {
@@ -138,11 +159,22 @@ impl eframe::App for MyApp {
         // album
         egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
+                ui.horizontal_wrapped(|ui: &mut egui::Ui| {
+                    let perfect_size = screen_size * MAGIC_FRACTION;
+                    let entry_box_size = egui::Vec2::from([
+                        perfect_size.x +
+                            (window_size.size().x % perfect_size.x)
+                            / (window_size.size().x as i32 / max(perfect_size.x as i32 - 1, 1)) as f32,
+                        perfect_size.y
+                    ]);
+                    // i think this is a good size?
+
+                    println!("{:?}\nsupposed number of imgs per line: {}",
+                        entry_box_size, (window_size.size().x as i32 / max(perfect_size.x as i32 - 1, 1)));
+
                     for entry in &self.selected_entries {
                         let (rect, resp) 
-                            = ui.allocate_exact_size(screen_size * 0.2, Sense::empty());
-                            // i think this is a good size?
+                            = ui.allocate_exact_size(entry_box_size, Sense::empty());
 
                         let uri = format!("file:///{}",
                             std::env::current_dir().unwrap()
@@ -154,7 +186,7 @@ impl eframe::App for MyApp {
 
                         let image_box = ui.put(
                                 rect,
-                                egui::Image::from_uri(uri).fit_to_exact_size(rect.size())
+                                egui::Image::from_uri(uri).fit_to_exact_size(entry_box_size)
                             );
                     }
                 });
