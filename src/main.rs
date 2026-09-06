@@ -60,7 +60,7 @@ impl EntryStorage {
         for file in fs::read_dir("./entries")? {
             let file = file?;
             new_entries.push(Entry {
-                name: file.file_name().to_string_lossy().to_string(),
+                name: file.path().with_extension("").file_name().unwrap().to_string_lossy().to_string(),
                 file_path: file.path().to_string_lossy().to_string(),
                 tags: vec![], // todo add propper tag search if entry exists in db
             });
@@ -88,6 +88,7 @@ struct MyApp {
     search_rq: String,
     selected_entries: Vec<Entry>,
     entry_storage: EntryStorage,
+    started: bool,
 }
 
 impl Default for MyApp {
@@ -96,6 +97,7 @@ impl Default for MyApp {
             search_rq: "".to_string(),
             selected_entries: vec![],
             entry_storage: EntryStorage::new(),
+            started: false,
         }
     }
 }
@@ -107,6 +109,12 @@ impl eframe::App for MyApp {
         let window_size = ui.ctx().input(|i| i.viewport().inner_rect).unwrap();
         let screen_size = ui.ctx().input(|i| i.viewport().monitor_size)
             .unwrap(); // todo handle none
+
+        if !self.started {
+            self.started = true;
+            self.entry_storage.upd_storage();
+            self.entry_storage.upd_entries_with_filter(&self. search_rq, &mut self.selected_entries);
+        }
 
         // top bar
         egui::Panel::top("search").show(ui, |ui| {
