@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
 eframe = "0.35.0"
-egui = "0.35.0"
-egui_extras = { version = "0.35.0", features = ["default", "image"] }
+egui = { version = "0.35.0" }
+egui_extras = { version = "0.35.0", features = ["all_loaders", "default", "image"] }
+image = { version = "0.25", features = ["jpeg", "png"] }
