@@ -1,7 +1,7 @@
 /* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release */
 /* #![expect(rustdoc::missing_crate_level_docs)] // it's an example */
 
-use std::{println, eprintln, fs, cmp::max};
+use std::{cmp::max, env::current_dir, eprintln, fs::{self, create_dir_all}, println, path::Path};
 use anyhow::Result;
 use egui::Sense;
 use eframe::egui;
@@ -56,6 +56,8 @@ impl EntryStorage {
 
     fn upd_storage(&mut self) -> Result<()> {
         let mut new_entries: Vec<Entry> = vec![];
+
+        create_dir_all(current_dir().unwrap().join("entries"))?;
 
         for file in fs::read_dir("./entries")? {
             let file = file?;
@@ -158,7 +160,20 @@ impl eframe::App for MyApp {
                     let add_entry_button = ui.button("  +  ");
     
                     if add_entry_button.clicked() {
-                        // todo add doohickey to select image
+                        let selected_files = rfd::FileDialog::new().pick_files().unwrap_or(vec![]);
+
+                        for file in selected_files {
+                            let res = fs::copy(
+                                &file, 
+                                Path::new("./entries").join(&file.file_name().unwrap())
+                            );
+                            if res.is_err() {
+                                eprintln!("{:?}", res.err());
+                            }
+                        }
+
+                        self.entry_storage.upd_storage();
+                        self.entry_storage.upd_entries_with_filter(&self. search_rq, &mut self.selected_entries);
                     }
                 });
             });
@@ -177,8 +192,8 @@ impl eframe::App for MyApp {
                     ]);
                     // i think this is a good size?
 
-                    println!("{:?}\nsupposed number of imgs per line: {}",
-                        entry_box_size, (window_size.size().x as i32 / max(perfect_size.x as i32 - 1, 1)));
+                    /* println!("{:?}\nsupposed number of imgs per line: {}",
+                        entry_box_size, (window_size.size().x as i32 / max(perfect_size.x as i32 - 1, 1))); */
 
                     for entry in &self.selected_entries {
                         let (rect, resp) 

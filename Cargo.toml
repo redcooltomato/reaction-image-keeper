@@ -9,3 +9,4 @@ eframe = "0.35.0"
 egui = { version = "0.35.0" }
 egui_extras = { version = "0.35.0", features = ["all_loaders", "default", "image"] }
 image = { version = "0.25", features = ["jpeg", "png"] }
+rfd = "0.17.2"
