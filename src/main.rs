@@ -96,6 +96,7 @@ impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         /* println!("{:?}\n\n", self.selected_entries); */
 
+        let window_size = ui.ctx().input(|i| i.viewport().inner_rect).unwrap();
         let screen_size = ui.ctx().input(|i| i.viewport().monitor_size)
             .unwrap(); // todo handle none
 
@@ -136,24 +137,27 @@ impl eframe::App for MyApp {
 
         // album
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                for entry in &self.selected_entries {
-                    let (rect, resp) 
-                        = ui.allocate_exact_size(screen_size * 0.33, Sense::empty());
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for entry in &self.selected_entries {
+                        let (rect, resp) 
+                            = ui.allocate_exact_size(screen_size * 0.2, Sense::empty());
+                            // i think this is a good size?
 
-                    let uri = format!("file:///{}",
-                        std::env::current_dir().unwrap()
-                        .join(&entry.file_path)
-                        .to_string_lossy().replace('\\', "/"))
-                        .replace("./", "");
+                        let uri = format!("file:///{}",
+                            std::env::current_dir().unwrap()
+                            .join(&entry.file_path)
+                            .to_string_lossy().replace('\\', "/"))
+                            .replace("./", "");
 
-                    /* println!("{uri}"); */
+                        /* println!("{uri}"); */
 
-                    let image_box = ui.put(
-                            rect,
-                            egui::Image::from_uri(uri).fit_to_exact_size(rect.size())
-                        );
-                }
+                        let image_box = ui.put(
+                                rect,
+                                egui::Image::from_uri(uri).fit_to_exact_size(rect.size())
+                            );
+                    }
+                });
             });
         });
     }
