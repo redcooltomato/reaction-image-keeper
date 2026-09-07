@@ -3,7 +3,7 @@
 
 use std::{cmp::max, env::current_dir, eprintln, fs::{self, create_dir_all}, println, path::Path};
 use anyhow::Result;
-use egui::Sense;
+use egui::{Sense, Vec2};
 use eframe::egui;
 
 const APP_NAME: &'static str = "reaction image keeper";
@@ -20,12 +20,13 @@ fn main() -> eframe::Result {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            /* let screen_size = cc.egui_ctx.input(|i| i.viewport().monitor_size)
+            let screen_size = cc.egui_ctx.input(|i| i.viewport().monitor_size)
                 .unwrap();
 
             cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(
                 screen_size * MAGIC_FRACTION
-            )); */
+                + Vec2::new(50., 50.) // magic numbers essentially
+            ));
 
             Ok(Box::<MyApp>::default())
         }),
@@ -108,7 +109,7 @@ impl eframe::App for MyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         /* println!("{:?}\n\n", self.selected_entries); */
 
-        let window_size = ui.ctx().input(|i| i.viewport().inner_rect).unwrap();
+        let window_rect = ui.ctx().input(|i| i.viewport().inner_rect).unwrap();
         let screen_size = ui.ctx().input(|i| i.viewport().monitor_size)
             .unwrap(); // todo handle none
 
@@ -180,20 +181,24 @@ impl eframe::App for MyApp {
         });
 
         // album
-        egui::CentralPanel::default().show(ui, |ui| {
+        egui::CentralPanel::default()
+            /* .frame(egui::Frame::new().inner_margin(0.)) */
+            .show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui: &mut egui::Ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+
                     let perfect_size = screen_size * MAGIC_FRACTION;
                     let entry_box_size = egui::Vec2::from([
-                        perfect_size.x +
-                            (window_size.size().x % perfect_size.x)
-                            / (window_size.size().x as i32 / max(perfect_size.x as i32 - 1, 1)) as f32,
+                        perfect_size.x 
+                        + (ui.available_width() % perfect_size.x)
+                            / (ui.available_width() / (perfect_size.x).max(1.)).max(1.),
                         perfect_size.y
                     ]);
                     // i think this is a good size?
 
-                    /* println!("{:?}\nsupposed number of imgs per line: {}",
-                        entry_box_size, (window_size.size().x as i32 / max(perfect_size.x as i32 - 1, 1))); */
+                    println!("{:?}",
+                        entry_box_size);
 
                     for entry in &self.selected_entries {
                         let (rect, resp) 
@@ -206,6 +211,8 @@ impl eframe::App for MyApp {
                             .replace("./", "");
 
                         /* println!("{uri}"); */
+
+                        /* println!("{} {}", ui.available_width(), entry_box_size); */
 
                         let image_box = ui.put(
                                 rect,
