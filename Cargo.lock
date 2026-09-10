@@ -3287,6 +3287,7 @@ name = "reaction-image-keeper"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arboard",
  "eframe",
  "egui",
  "egui_extras",

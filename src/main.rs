@@ -1,10 +1,12 @@
 /* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release */
 /* #![expect(rustdoc::missing_crate_level_docs)] // it's an example */
 
-use std::{cmp::max, env::current_dir, eprintln, fs::{self, create_dir_all}, println, path::Path};
+use std::{cmp::max, env::current_dir, eprintln, fs::{self, create_dir_all, File}, println, path::Path, io::BufReader};
 use anyhow::Result;
 use egui::{Margin, Rect, Sense, Stroke, Vec2};
 use eframe::egui;
+use arboard::{Clipboard, ImageData};
+use image::{GenericImageView, ImageReader, image_dimensions};
 
 const APP_NAME: &'static str = "reaction image keeper";
 const MAGIC_FRACTION: f32 = 0.15;
@@ -39,6 +41,9 @@ struct Entry {
     name: String,
     file_path: String,
     tags: Vec<String>,
+    width: u32,
+    height: u32,
+    img_data_raw: Vec<u8>,
 }
 
 // doohickey that keeps entries and their metadata
@@ -62,10 +67,16 @@ impl EntryStorage {
 
         for file in fs::read_dir("./entries")? {
             let file = file?;
+            let img  = ImageReader::open(&file.path()).unwrap();
+            let (w, h) = image_dimensions(&file.path()).unwrap();
+
             new_entries.push(Entry {
                 name: file.path().with_extension("").file_name().unwrap().to_string_lossy().to_string(),
                 file_path: file.path().to_string_lossy().to_string(),
                 tags: vec![], // todo add propper tag search if entry exists in db
+                width: w,
+                height: h,
+                img_data_raw: img.decode().unwrap().to_rgba8().into_raw(),
             });
         }
 
@@ -86,12 +97,12 @@ impl EntryStorage {
 }
 
 // window itself
-#[derive(Debug)]
 struct App {
     search_rq: String,
     selected_entries: Vec<Entry>,
     entry_storage: EntryStorage,
     started: bool,
+    arboard_ctx: Clipboard,
 }
 
 impl Default for App {
@@ -101,6 +112,7 @@ impl Default for App {
             selected_entries: vec![],
             entry_storage: EntryStorage::new(),
             started: false,
+            arboard_ctx: Clipboard::new().unwrap(),
         }
     }
 }
@@ -185,62 +197,77 @@ impl eframe::App for App {
             /* .frame(egui::Frame::new().inner_margin(0.)) */
             .show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.horizontal_wrapped(|ui: &mut egui::Ui| {
-                        ui.spacing_mut().item_spacing.x = 0.;
+                ui.horizontal_wrapped(|ui: &mut egui::Ui| {
+                    ui.spacing_mut().item_spacing.x = 0.;
 
-                        let perfect_size = screen_size * MAGIC_FRACTION;
-                        let entry_box_size = egui::Vec2::from([
-                            perfect_size.x 
-                            + (ui.available_width() % perfect_size.x)
-                                / (ui.available_width() / (perfect_size.x).max(1.)).max(1.),
-                            perfect_size.y + (window_rect.max.y * 0.1)
-                        ]);
-                        // i think this is a good size?
+                    let perfect_size = screen_size * MAGIC_FRACTION;
+                    let entry_box_size = egui::Vec2::from([
+                        perfect_size.x 
+                        + (ui.available_width() % perfect_size.x)
+                            / (ui.available_width() / (perfect_size.x).max(1.)).max(1.),
+                        perfect_size.y + (window_rect.max.y * 0.1)
+                    ]);
+                    // i think this is a good size?
 
-                        /* println!("{:?}",
-                            entry_box_size); */
+                    /* println!("{:?}",
+                        entry_box_size); */
 
-                        for entry in &self.selected_entries {
-                            let (rect, resp) 
-                                = ui.allocate_exact_size(entry_box_size, Sense::empty());
+                    for entry in &self.selected_entries {
+                        let (rect, resp) 
+                            = ui.allocate_exact_size(entry_box_size, Sense::empty());
 
-                            let uri = format!("file:///{}",
-                                std::env::current_dir().unwrap()
-                                .join(&entry.file_path)
-                                .to_string_lossy().replace('\\', "/"))
-                                .replace("./", "");
+                        let uri = format!("file:///{}",
+                            std::env::current_dir().unwrap()
+                            .join(&entry.file_path)
+                            .to_string_lossy().replace('\\', "/"))
+                            .replace("./", "");
 
-                            /* println!("{uri}"); */
+                        /* println!("{uri}"); */
 
-                            /* println!("{} {}", ui.available_width(), entry_box_size); */
+                        /* println!("{} {}", ui.available_width(), entry_box_size); */
 
-                            let image_box = 
-                                egui::Frame::group(ui.style())
-                                .stroke(Stroke {
-                                    width: 1.,
-                                    color: if ui.ctx().theme() == egui::Theme::Dark
-                                            { egui::Color32::from_rgb(0xff, 0xff, 0xff) }
-                                        else
-                                            { egui::Color32::from_rgb(0x00, 0x00, 0x00) }
-                                })
-                                .inner_margin(Margin { left: 0, right: 0, top: 0, bottom: 0})
-                                .outer_margin(Margin { left: 0, right: 0, top: 5, bottom: 5})
-                                .show(ui, |ui| {
-                                    /* ui.set_clip_rect(rect); */
-                                    ui.vertical(|ui| {
-                                        ui.put(
+                        let image_box = 
+                            egui::Frame::group(ui.style())
+                            .stroke(Stroke {
+                                width: 1.,
+                                color: if ui.ctx().theme() == egui::Theme::Dark
+                                        { egui::Color32::from_rgb(0xff, 0xff, 0xff) }
+                                    else
+                                        { egui::Color32::from_rgb(0x00, 0x00, 0x00) }
+                            })
+                            .inner_margin(Margin { left: 0, right: 0, top: 0, bottom: 0})
+                            .outer_margin(Margin { left: 0, right: 0, top: 5, bottom: 5})
+                            .show(ui, |ui| {
+                                /* ui.set_clip_rect(rect); */
+                                ui.vertical(|ui| {
+                                    ui.put(
                                         rect,
                                         egui::Image::from_uri(uri)
                                     );
+
                                     ui.horizontal(|ui| {
-                                        let copy_button = ui.button("⎘");
+                                        let copy_button = ui.button("📋");
+
+                                        if copy_button.clicked() {
+                                            match self.arboard_ctx.set_image(ImageData {
+                                                    width: entry.width as usize,
+                                                    height: entry.height as usize,
+                                                    bytes: std::borrow::Cow::from(entry.img_data_raw.clone()),
+                                                }) {
+                                                Ok(_) => (),
+                                                Err(e) => eprintln!("error occured while copying image to clipboard: {}", e),
+                                            }
+                                        }
+
                                         let delete_button = ui.button("🗑");
-                                    });
+
+                                        if delete_button.clicked() {
+
+                                        }
                                     });
                                 });
-                        }
-                    });
+                            });
+                    }
                 });
             });
         });
