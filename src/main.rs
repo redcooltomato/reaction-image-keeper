@@ -1,7 +1,7 @@
 /* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release */
 /* #![expect(rustdoc::missing_crate_level_docs)] // it's an example */
 
-use std::{cmp::max, env::current_dir, eprintln, fs::{self, create_dir_all, File}, println, path::Path, io::BufReader};
+use std::{cmp::max, env::current_dir, eprintln, fs::{self, File, create_dir_all}, io::BufReader, path::Path, println, vec};
 use anyhow::Result;
 use egui::{Margin, Rect, Sense, Stroke, Vec2};
 use eframe::egui;
@@ -46,20 +46,17 @@ struct Entry {
     img_data_raw: Vec<u8>,
 }
 
-// doohickey that keeps entries and their metadata
-#[derive(Debug)]
-struct EntryStorage {
-    entries: Vec<Entry>,
-    // todo add metadata storage n stuff
+// window itself
+struct App {
+    search_rq: String,
+    selected_entries: Vec<Entry>,
+    entries: Vec<Entry>, // todo add metadata storage n stuff
+    entry_deletion_queue: Vec<Entry>,
+    started: bool,
+    arboard_ctx: Clipboard,
 }
 
-impl EntryStorage {
-    fn new() -> Self {
-        EntryStorage {
-            entries: vec![],
-        }
-    }
-
+impl App {
     fn upd_storage(&mut self) -> Result<()> {
         let mut new_entries: Vec<Entry> = vec![];
 
@@ -85,24 +82,15 @@ impl EntryStorage {
         Ok(())
     }
 
-    fn upd_entries_with_filter(&self, search_rq: &String, selected_entries: &mut Vec<Entry>) {
-        selected_entries.clear();
+    fn upd_entries_with_filter(&mut self) {
+        self.selected_entries.clear();
 
         for entry in &self.entries {
-            if search_rq.trim() == "" || entry.name.contains(search_rq) /* && !selected_entries.contains(entry) */ {
-                selected_entries.push(entry.clone());
+            if self.search_rq.trim() == "" || entry.name.contains(&self.search_rq) /* && !selected_entries.contains(entry) */ {
+                self.selected_entries.push(entry.clone());
             }
         }
     }
-}
-
-// window itself
-struct App {
-    search_rq: String,
-    selected_entries: Vec<Entry>,
-    entry_storage: EntryStorage,
-    started: bool,
-    arboard_ctx: Clipboard,
 }
 
 impl Default for App {
@@ -110,7 +98,8 @@ impl Default for App {
         Self {
             search_rq: "".to_string(),
             selected_entries: vec![],
-            entry_storage: EntryStorage::new(),
+            entries: vec![],
+            entry_deletion_queue: vec![],
             started: false,
             arboard_ctx: Clipboard::new().unwrap(),
         }
@@ -127,8 +116,8 @@ impl eframe::App for App {
 
         if !self.started {
             self.started = true;
-            self.entry_storage.upd_storage();
-            self.entry_storage.upd_entries_with_filter(&self. search_rq, &mut self.selected_entries);
+            self.upd_storage();
+            self.upd_entries_with_filter();
         }
 
         // top bar
@@ -144,7 +133,7 @@ impl eframe::App for App {
                     .response;
                     
                 if search_input.changed() {
-                    self.entry_storage.upd_entries_with_filter(&self.search_rq, &mut self.selected_entries);
+                    self.upd_entries_with_filter();
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
@@ -164,7 +153,7 @@ impl eframe::App for App {
                     let reload_list_button = ui.button("  ⟳  ");
 
                     if reload_list_button.clicked() {
-                        let resp = self.entry_storage.upd_storage(); // todo handle failure
+                        let resp = self.upd_storage(); // todo handle failure
                         if resp.is_err() {
                             eprintln!("{:?}", resp.err());
                         }
@@ -185,8 +174,8 @@ impl eframe::App for App {
                             }
                         }
 
-                        self.entry_storage.upd_storage();
-                        self.entry_storage.upd_entries_with_filter(&self. search_rq, &mut self.selected_entries);
+                        self.upd_storage();
+                        self.upd_entries_with_filter();
                     }
                 });
             });
@@ -262,7 +251,7 @@ impl eframe::App for App {
                                         let delete_button = ui.button("🗑");
 
                                         if delete_button.clicked() {
-
+                                            
                                         }
                                     });
                                 });
