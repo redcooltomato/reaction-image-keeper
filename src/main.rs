@@ -1,12 +1,12 @@
 /* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release */
 /* #![expect(rustdoc::missing_crate_level_docs)] // it's an example */
 
-use std::{cmp::max, env::current_dir, eprintln, fs::{self, File, create_dir_all}, io::BufReader, path::Path, println, vec};
+use std::{env::current_dir, eprintln, fs::{self, create_dir_all}, path::Path, vec};
 use anyhow::Result;
-use egui::{Margin, Rect, Sense, Stroke, Vec2};
+use egui::{Margin, Sense, Stroke, Vec2};
 use eframe::egui;
 use arboard::{Clipboard, ImageData};
-use image::{GenericImageView, ImageReader, image_dimensions};
+use image::{ImageReader, image_dimensions};
 
 const APP_NAME: &'static str = "reaction image keeper";
 const MAGIC_FRACTION: f32 = 0.15;
@@ -51,7 +51,6 @@ struct App {
     search_rq: String,
     selected_entries: Vec<Entry>,
     entries: Vec<Entry>, // todo add metadata storage n stuff
-    entry_deletion_queue: Vec<Entry>,
     started: bool,
     arboard_ctx: Clipboard,
 }
@@ -99,7 +98,6 @@ impl Default for App {
             search_rq: "".to_string(),
             selected_entries: vec![],
             entries: vec![],
-            entry_deletion_queue: vec![],
             started: false,
             arboard_ctx: Clipboard::new().unwrap(),
         }
@@ -109,6 +107,8 @@ impl Default for App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         /* println!("{:?}\n\n", self.selected_entries); */
+
+        let mut entry_deletion_queue: Vec<Entry> = vec![]; // storing ref creates borrowing hell
 
         let window_rect = ui.ctx().input(|i| i.viewport().inner_rect).unwrap();
         let screen_size = ui.ctx().input(|i| i.viewport().monitor_size)
@@ -157,6 +157,7 @@ impl eframe::App for App {
                         if resp.is_err() {
                             eprintln!("{:?}", resp.err());
                         }
+                        self.upd_entries_with_filter();
                     }
 
                     let add_entry_button = ui.button("  +  ");
@@ -200,7 +201,7 @@ impl eframe::App for App {
 
                     /* println!("{:?}",
                         entry_box_size); */
-
+                    
                     for entry in &self.selected_entries {
                         let (rect, resp) 
                             = ui.allocate_exact_size(entry_box_size, Sense::empty());
@@ -251,7 +252,7 @@ impl eframe::App for App {
                                         let delete_button = ui.button("🗑");
 
                                         if delete_button.clicked() {
-                                            
+                                            entry_deletion_queue.push(entry.clone());
                                         }
                                     });
                                 });
@@ -260,5 +261,10 @@ impl eframe::App for App {
                 });
             });
         });
+
+        for entry_to_delete in entry_deletion_queue {
+            self.entries.retain(|e| *e != entry_to_delete);
+            self.selected_entries.retain(|e| *e != entry_to_delete);
+        }
     }
 }
