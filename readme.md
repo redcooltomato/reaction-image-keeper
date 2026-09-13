@@ -1,4 +1,7 @@
 plans:
-store imgs in a directory
-tags in json
-tag search via filters
+- [x] store imgs localy
+- [x] copy imgs to clipboard
+- [ ] support videos
+- [ ] tags in json
+- [ ] tag search via filters
+- [ ] compression of some sort?
